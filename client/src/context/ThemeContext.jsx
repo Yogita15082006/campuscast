@@ -1,39 +1,34 @@
-import { useState, useEffect, createContext, useContext } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 
-const ThemeContext = createContext();
+const ThemeContext = createContext(null);
 
-export const useTheme = () => useContext(ThemeContext);
-
-export const ThemeProvider = ({ children }) => {
-  const [isDarkMode, setIsDarkMode] = useState(false);
+export function ThemeProvider({ children }) {
+  const [dark, setDark] = useState(() => {
+    const saved = localStorage.getItem('campuscast-dark');
+    return saved === 'true';
+  });
 
   useEffect(() => {
-    const isDark = localStorage.getItem('darkMode') === 'true' || 
-      (!('darkMode' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    
-    setIsDarkMode(isDark);
-    if (isDark) {
-      document.documentElement.classList.add('dark');
+    const root = document.documentElement;
+    if (dark) {
+      root.classList.add('dark');
     } else {
-      document.documentElement.classList.remove('dark');
+      root.classList.remove('dark');
     }
-  }, []);
+    localStorage.setItem('campuscast-dark', dark);
+  }, [dark]);
 
-  const toggleDarkMode = () => {
-    const newMode = !isDarkMode;
-    setIsDarkMode(newMode);
-    localStorage.setItem('darkMode', newMode);
-    
-    if (newMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  };
+  const toggle = () => setDark(d => !d);
 
   return (
-    <ThemeContext.Provider value={{ isDarkMode, toggleDarkMode }}>
+    <ThemeContext.Provider value={{ dark, toggle }}>
       {children}
     </ThemeContext.Provider>
   );
-};
+}
+
+export function useTheme() {
+  const ctx = useContext(ThemeContext);
+  if (!ctx) throw new Error('useTheme must be used within ThemeProvider');
+  return ctx;
+}

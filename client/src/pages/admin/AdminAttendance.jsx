@@ -1,279 +1,98 @@
 import { useState, useEffect } from 'react';
-import api from '../../utils/api';
-import { FiCheckCircle, FiClock, FiDownload, FiUsers, FiFilter } from 'react-icons/fi';
+import { Download, Users, Calendar, BarChart3 } from 'lucide-react';
+import AdminLayout from '../../layouts/AdminLayout';
+import AttendanceCodeBox from '../../components/AttendanceCodeBox';
+import StatusBadge from '../../components/StatusBadge';
+import { PageSkeleton } from '../../components/LoadingSkeleton';
+import { mockData } from '../../data/mockData';
 import toast from 'react-hot-toast';
 
-const AdminAttendance = () => {
-  const [events, setEvents] = useState([]);
-  const [selectedEventId, setSelectedEventId] = useState('');
-  
-  const [attendanceStats, setAttendanceStats] = useState(null);
-  const [activeCode, setActiveCode] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [loadingEvents, setLoadingEvents] = useState(true);
-  
-  const [generating, setGenerating] = useState(false);
-  const [duration, setDuration] = useState(15);
+export default function AdminAttendance() {
+  const [loading, setLoading] = useState(true);
+  const [event, setEvent] = useState(mockData.events[0].id);
+  const [filter, setFilter] = useState('All');
 
-  useEffect(() => {
-    fetchEvents();
-  }, []);
+  useEffect(() => { const t = setTimeout(() => setLoading(false), 800); return () => clearTimeout(t); }, []);
+  if (loading) return <AdminLayout><PageSkeleton /></AdminLayout>;
 
-  useEffect(() => {
-    if (selectedEventId) {
-      fetchAttendanceData(selectedEventId);
-      fetchActiveCode(selectedEventId);
-    } else {
-      setAttendanceStats(null);
-      setActiveCode(null);
-    }
-  }, [selectedEventId]);
+  const currEvent = mockData.events.find(e => e.id === event);
+  const attData = mockData.adminAttendance;
+  const filtered = attData.filter(a => filter === 'All' || a.status === filter);
+  const present = attData.filter(a => a.status === 'Present').length;
+  const pct = Math.round((present / attData.length) * 100);
 
-  const fetchEvents = async () => {
-    try {
-      setLoadingEvents(true);
-      const res = await api.get('/events?limit=100');
-      setEvents(res.data.data.events);
-      if (res.data.data.events.length > 0) {
-        setSelectedEventId(res.data.data.events[0]._id);
-      }
-    } catch (error) {
-      toast.error('Failed to load events');
-    } finally {
-      setLoadingEvents(false);
-    }
-  };
-
-  const fetchAttendanceData = async (eventId) => {
-    try {
-      setLoading(true);
-      const res = await api.get(`/attendance/event/${eventId}`);
-      setAttendanceStats(res.data.data);
-    } catch (error) {
-      toast.error('Failed to load attendance data');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchActiveCode = async (eventId) => {
-    try {
-      const res = await api.get(`/attendance/active-code/${eventId}`);
-      setActiveCode(res.data.data.code);
-    } catch (error) {
-      console.error('Failed to fetch active code', error);
-    }
-  };
-
-  const generateCode = async (e) => {
-    e.preventDefault();
-    if (!selectedEventId) return;
-    
-    try {
-      setGenerating(true);
-      const res = await api.post('/attendance/generate-code', { 
-        eventId: selectedEventId, 
-        duration: Number(duration) 
-      });
-      toast.success('Attendance code generated!');
-      setActiveCode(res.data.data.code);
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to generate code');
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const downloadCsv = async () => {
-    if (!selectedEventId) return;
-    try {
-      const res = await api.get(`/attendance/export/${selectedEventId}`, { responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `attendance-${selectedEventId}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      toast.success('Export downloaded');
-    } catch (error) {
-      toast.error('Failed to export CSV');
-    }
-  };
-
-  const calculateTimeRemaining = (expiresAt) => {
-    const remaining = new Date(expiresAt) - new Date();
-    if (remaining <= 0) return 'Expired';
-    const minutes = Math.floor(remaining / 60000);
-    const seconds = Math.floor((remaining % 60000) / 1000);
-    return `${minutes}m ${seconds}s`;
-  };
+  const stats = [
+    { label: 'Total Registered', val: currEvent.registered, icon: <Users size={16}/>, color: '#4F46E5', bg: 'rgba(79,70,229,0.1)' },
+    { label: 'Present', val: present, icon: <Calendar size={16}/>, color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
+    { label: 'Absent', val: attData.length - present, icon: <Users size={16}/>, color: '#F43F5E', bg: 'rgba(244,63,94,0.1)' },
+    { label: 'Attendance %', val: `${pct}%`, icon: <BarChart3 size={16}/>, color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' }
+  ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Attendance Management</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">Generate codes and track event attendance.</p>
-        </div>
-        {selectedEventId && attendanceStats && (
-          <button onClick={downloadCsv} className="btn btn-outline flex items-center gap-2">
-            <FiDownload /> Export CSV
-          </button>
-        )}
-      </div>
-
-      <div className="card p-4 flex flex-col sm:flex-row gap-4 items-center bg-gray-50 dark:bg-gray-800/50">
-        <FiFilter className="text-gray-400 hidden sm:block" />
-        <label className="whitespace-nowrap font-medium text-gray-700 dark:text-gray-300">Select Event:</label>
-        {loadingEvents ? (
-          <div className="animate-pulse h-10 bg-gray-200 dark:bg-gray-700 rounded w-full sm:w-64"></div>
-        ) : (
-          <select 
-            className="input-field w-full sm:w-auto min-w-[250px]"
-            value={selectedEventId}
-            onChange={(e) => setSelectedEventId(e.target.value)}
-          >
-            <option value="">-- Choose an event --</option>
-            {events.map(event => (
-              <option key={event._id} value={event._id}>{event.title}</option>
-            ))}
+    <AdminLayout>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <h1 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--foreground)' }}>Attendance Management</h1>
+            <p style={{ fontSize: '13px', color: 'var(--muted-foreground)', marginTop: '4px' }}>Manage attendance codes and track records</p>
+          </div>
+          <select value={event} onChange={e => setEvent(e.target.value)} style={{ height: '40px', padding: '0 16px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--foreground)', fontSize: '14px', fontWeight: 600, outline: 'none', cursor: 'pointer', minWidth: '240px' }}>
+            {mockData.events.map(e => <option key={e.id} value={e.id}>{e.title}</option>)}
           </select>
-        )}
-      </div>
-
-      {!selectedEventId && !loadingEvents ? (
-        <div className="text-center py-16 card">
-          <FiCheckCircle className="mx-auto text-gray-400 mb-4" size={48} />
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white">No Event Selected</h3>
-          <p className="text-gray-500 mt-1">Please select an event to manage its attendance.</p>
         </div>
-      ) : loading ? (
-        <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div></div>
-      ) : attendanceStats ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Active Code / Generation Panel */}
-          <div className="lg:col-span-1 space-y-6">
-            <div className="card p-6 border-t-4 border-primary-500">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                <FiClock className="text-primary-500" /> Attendance Code
-              </h3>
-              
-              {activeCode ? (
-                <div className="text-center py-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-700">
-                  <p className="text-sm text-gray-500 mb-2">Active Code</p>
-                  <p className="text-4xl font-mono font-bold tracking-widest text-primary-600 dark:text-primary-400">
-                    {activeCode.code}
-                  </p>
-                  <div className="mt-4 inline-block bg-white dark:bg-gray-800 px-3 py-1 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 shadow-sm border border-gray-100 dark:border-gray-700">
-                    Expires: {new Date(activeCode.expiresAt).toLocaleTimeString()}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+          {stats.map(s => (
+            <div key={s.label} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: s.bg, color: s.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{s.icon}</div>
+              <div>
+                <p style={{ fontSize: '12px', color: 'var(--muted-foreground)', fontWeight: 500 }}>{s.label}</p>
+                <p style={{ fontSize: '20px', fontWeight: 800, color: 'var(--foreground)' }}>{s.val}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '24px', alignItems: 'start' }}>
+          {/* Table */}
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h3 style={{ fontWeight: 700, fontSize: '15px', color: 'var(--foreground)' }}>Attendance Records</h3>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {['All', 'Present', 'Absent'].map(f => (
+                  <button key={f} onClick={() => setFilter(f)} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border)', background: filter === f ? 'var(--primary)' : 'transparent', color: filter === f ? '#fff' : 'var(--muted-foreground)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>{f}</button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr', padding: '12px 20px', background: 'var(--muted)', borderBottom: '1px solid var(--border)' }}>
+              {['Student Name', 'Email', 'Status', 'Time'].map(h => <span key={h} style={{ fontSize: '11px', fontWeight: 700, color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>{h}</span>)}
+            </div>
+            <div>
+              {filtered.map((r, i) => (
+                <div key={r.id} style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr', padding: '14px 20px', alignItems: 'center', borderBottom: i < filtered.length - 1 ? '1px solid var(--border)' : 'none', transition: 'background 0.15s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--muted)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(79,70,229,0.1)', color: '#4F46E5', fontSize: '11px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{r.name.slice(0, 2).toUpperCase()}</div>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>{r.name}</span>
                   </div>
-                  <button 
-                    onClick={() => fetchActiveCode(selectedEventId)} 
-                    className="mt-4 text-xs text-primary-500 hover:underline block w-full"
-                  >
-                    Refresh Status
-                  </button>
+                  <span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>{r.email}</span>
+                  <StatusBadge status={r.status} />
+                  <span style={{ fontSize: '12px', color: 'var(--muted-foreground)', fontFamily: 'monospace' }}>{r.timeMarked}</span>
                 </div>
-              ) : (
-                <form onSubmit={generateCode} className="space-y-4">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    No active code. Generate a new one for students to mark attendance.
-                  </p>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Duration (minutes)</label>
-                    <select 
-                      className="input-field w-full"
-                      value={duration}
-                      onChange={(e) => setDuration(e.target.value)}
-                    >
-                      <option value="5">5 Minutes</option>
-                      <option value="10">10 Minutes</option>
-                      <option value="15">15 Minutes</option>
-                      <option value="30">30 Minutes</option>
-                      <option value="60">1 Hour</option>
-                    </select>
-                  </div>
-                  <button 
-                    type="submit" 
-                    disabled={generating}
-                    className="btn btn-primary w-full"
-                  >
-                    {generating ? 'Generating...' : 'Generate New Code'}
-                  </button>
-                </form>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="card p-4 text-center">
-                <FiUsers className="mx-auto text-blue-500 mb-2" size={24} />
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">{attendanceStats.totalRegistered}</p>
-                <p className="text-xs text-gray-500 mt-1">Total Registered</p>
-              </div>
-              <div className="card p-4 text-center">
-                <FiCheckCircle className="mx-auto text-green-500 mb-2" size={24} />
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">{attendanceStats.totalPresent}</p>
-                <p className="text-xs text-gray-500 mt-1">Total Present</p>
-              </div>
+              ))}
             </div>
           </div>
 
-          {/* Attendance List */}
-          <div className="lg:col-span-2 card overflow-hidden flex flex-col">
-            <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50">
-              <h3 className="font-bold text-gray-900 dark:text-white">Present Students</h3>
-              <span className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-3 py-1 rounded-full text-xs font-bold">
-                {attendanceStats.attendance.length} Records
-              </span>
-            </div>
-            
-            <div className="overflow-x-auto flex-1">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider">
-                    <th className="p-4 font-medium border-b border-gray-100 dark:border-gray-700">Student</th>
-                    <th className="p-4 font-medium border-b border-gray-100 dark:border-gray-700">Email</th>
-                    <th className="p-4 font-medium border-b border-gray-100 dark:border-gray-700">Time Marked</th>
-                    <th className="p-4 font-medium border-b border-gray-100 dark:border-gray-700">Code Used</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {attendanceStats.attendance.map(record => (
-                    <tr key={record._id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                      <td className="p-4 font-medium text-gray-900 dark:text-white">
-                        {record.student?.name || 'Unknown'}
-                      </td>
-                      <td className="p-4 text-sm text-gray-600 dark:text-gray-400">
-                        {record.student?.email || 'N/A'}
-                      </td>
-                      <td className="p-4 text-sm text-gray-600 dark:text-gray-400">
-                        {new Date(record.markedAt).toLocaleTimeString()}
-                      </td>
-                      <td className="p-4">
-                        <span className="font-mono text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                          {record.codeUsed}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                  {attendanceStats.attendance.length === 0 && (
-                    <tr>
-                      <td colSpan="4" className="p-8 text-center text-gray-500">
-                        No attendance records yet for this event.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+          {/* Right sidebar */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <AttendanceCodeBox />
+            <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px', padding: '24px' }}>
+              <h3 style={{ fontWeight: 700, fontSize: '15px', color: 'var(--foreground)', marginBottom: '16px' }}>Export Data</h3>
+              <p style={{ fontSize: '13px', color: 'var(--muted-foreground)', marginBottom: '16px', lineHeight: 1.6 }}>Download the full attendance report for {currEvent.title} as a CSV file.</p>
+              <button onClick={() => toast.success('Exporting CSV…')} style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--foreground)', fontWeight: 600, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><Download size={16} /> Export to CSV</button>
             </div>
           </div>
-
         </div>
-      ) : null}
-    </div>
+      </div>
+    </AdminLayout>
   );
-};
-
-export default AdminAttendance;
+}
