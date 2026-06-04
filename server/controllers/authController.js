@@ -1,24 +1,34 @@
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-
-const generateToken = (id, role) => {
-  return jwt.sign({ id, role }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
-  });
-};
+const { supabase, supabaseAdmin } = require('../config/supabase');
 
 // POST /api/auth/register
 exports.register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ success: false, message: 'Email already registered' });
+    // Sign up with Supabase Auth — triggers handle_new_user to insert into profiles
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { name, role: 'student' },
+      },
+    });
+
+    if (error) {
+      return res.status(400).json({ success: false, message: error.message });
     }
 
-    const user = await User.create({ name, email, password, role: 'student' });
-    const token = generateToken(user._id, user.role);
+    if (!data.session) {
+      // Supabase email confirmation required — but we'll still return success
+      return res.status(201).json({
+        success: true,
+        message: 'Registration successful. Please confirm your email if required.',
+        data: { user: { id: data.user.id, email: data.user.email, name, role: 'student' } },
+      });
+    }
+
+    const token = data.session.access_token;
+    const user = { id: data.user.id, _id: data.user.id, email, name, role: 'student' };
 
     res.status(201).json({
       success: true,
@@ -35,17 +45,27 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email }).select('+password');
-    if (!user) {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error || !data.session) {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
 
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'Invalid email or password' });
-    }
+    // Fetch profile to get name and role
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('id', data.user.id)
+      .single();
 
-    const token = generateToken(user._id, user.role);
+    const token = data.session.access_token;
+    const user = {
+      id: data.user.id,
+      _id: data.user.id,
+      email: data.user.email,
+      name: profile?.name || '',
+      role: profile?.role || 'student',
+    };
 
     res.json({
       success: true,
@@ -62,17 +82,31 @@ exports.adminLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email, role: 'admin' }).select('+password');
-    if (!user) {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error || !data.session) {
       return res.status(401).json({ success: false, message: 'Invalid admin credentials' });
     }
 
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
+    // Verify admin role
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('id', data.user.id)
+      .single();
+
+    if (!profile || profile.role !== 'admin') {
       return res.status(401).json({ success: false, message: 'Invalid admin credentials' });
     }
 
-    const token = generateToken(user._id, user.role);
+    const token = data.session.access_token;
+    const user = {
+      id: data.user.id,
+      _id: data.user.id,
+      email: data.user.email,
+      name: profile.name,
+      role: profile.role,
+    };
 
     res.json({
       success: true,
@@ -87,32 +121,64 @@ exports.adminLogin = async (req, res) => {
 // GET /api/auth/me
 exports.getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
-    res.json({ success: true, data: { user } });
+    const { data: profile, error } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('id', req.user.id)
+      .single();
+
+    if (error || !profile) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    res.json({ success: true, data: { user: { ...profile, _id: profile.id } } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// POST /api/auth/admin/seed (create first admin - remove in production)
+// POST /api/auth/admin/seed — creates the first admin user
 exports.seedAdmin = async (req, res) => {
   try {
-    const existingAdmin = await User.findOne({ role: 'admin' });
-    if (existingAdmin) {
+    // Check if admin already exists
+    const { data: existing } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('role', 'admin')
+      .limit(1)
+      .single();
+
+    if (existing) {
       return res.status(400).json({ success: false, message: 'Admin already exists' });
     }
 
-    const admin = await User.create({
+    const adminEmail = 'admin@campuscast.com';
+    const adminPassword = 'Admin@123456';
+
+    // Create auth user
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email: adminEmail,
+      password: adminPassword,
+      email_confirm: true,
+      user_metadata: { name: 'Admin', role: 'admin' },
+    });
+
+    if (error) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+
+    // Upsert profile with admin role (trigger may have already created it)
+    await supabaseAdmin.from('profiles').upsert({
+      id: data.user.id,
       name: 'Admin',
-      email: 'admin@campuscast.com',
-      password: 'admin123',
+      email: adminEmail,
       role: 'admin',
     });
 
     res.status(201).json({
       success: true,
       message: 'Admin created successfully',
-      data: { email: admin.email, password: 'admin123' },
+      data: { email: adminEmail, password: adminPassword },
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

@@ -1,49 +1,91 @@
-const Team = require('../models/Team');
-const Event = require('../models/Event');
-const Registration = require('../models/Registration');
+const { supabaseAdmin } = require('../config/supabase');
+
+// Helper: generate random 6-char uppercase team code
+const generateTeamCode = () => Math.random().toString(36).substring(2, 8).toUpperCase();
 
 // POST /api/teams
 exports.createTeam = async (req, res) => {
   try {
     const { teamName, eventId } = req.body;
-    const leaderId = req.user._id;
+    const leaderId = req.user.id;
 
-    const event = await Event.findById(eventId);
-    if (!event) {
+    // Check event exists and supports teams
+    const { data: event, error: evtError } = await supabaseAdmin
+      .from('events')
+      .select('id, is_team_event, team_size_limit')
+      .eq('id', eventId)
+      .single();
+
+    if (evtError || !event) {
       return res.status(404).json({ success: false, message: 'Event not found' });
     }
-    if (!event.isTeamEvent) {
+    if (!event.is_team_event) {
       return res.status(400).json({ success: false, message: 'This event does not support teams' });
     }
 
-    // Check if student is registered
-    const registration = await Registration.findOne({ student: leaderId, event: eventId });
+    // Check leader is registered
+    const { data: registration } = await supabaseAdmin
+      .from('registrations')
+      .select('id')
+      .eq('student_id', leaderId)
+      .eq('event_id', eventId)
+      .maybeSingle();
+
     if (!registration) {
       return res.status(400).json({ success: false, message: 'You must register for the event first' });
     }
 
-    // Check if student already has a team for this event
-    const existingTeam = await Team.findOne({ event: eventId, members: leaderId });
+    // Check leader not already in a team for this event
+    const { data: existingMembership } = await supabaseAdmin
+      .from('team_members')
+      .select('team_id')
+      .eq('student_id', leaderId)
+      .eq('teams.event_id', eventId)
+      .limit(1)
+      .maybeSingle();
+
+    // Alternate check via join
+    const { data: existingTeam } = await supabaseAdmin
+      .from('teams')
+      .select('id, team_members!inner(student_id)')
+      .eq('event_id', eventId)
+      .eq('team_members.student_id', leaderId)
+      .maybeSingle();
+
     if (existingTeam) {
       return res.status(400).json({ success: false, message: 'You are already in a team for this event' });
     }
 
-    const team = await Team.create({
-      teamName,
-      event: eventId,
-      leader: leaderId,
-      members: [leaderId],
-      maxSize: event.teamSizeLimit,
+    // Create team
+    const teamCode = generateTeamCode();
+    const { data: team, error: teamError } = await supabaseAdmin
+      .from('teams')
+      .insert({
+        team_name: teamName,
+        team_code: teamCode,
+        event_id: eventId,
+        leader_id: leaderId,
+        max_size: event.team_size_limit,
+      })
+      .select()
+      .single();
+
+    if (teamError) throw teamError;
+
+    // Add leader to team_members
+    await supabaseAdmin.from('team_members').insert({
+      team_id: team.id,
+      student_id: leaderId,
     });
 
-    // Update registration with team reference
-    registration.team = team._id;
-    await registration.save();
+    // Update registration with team_id
+    await supabaseAdmin
+      .from('registrations')
+      .update({ team_id: team.id })
+      .eq('student_id', leaderId)
+      .eq('event_id', eventId);
 
-    const populated = await Team.findById(team._id)
-      .populate('leader', 'name email')
-      .populate('members', 'name email')
-      .populate('event', 'title');
+    const populated = await getPopulatedTeam(team.id);
 
     res.status(201).json({
       success: true,
@@ -59,40 +101,65 @@ exports.createTeam = async (req, res) => {
 exports.joinTeam = async (req, res) => {
   try {
     const { teamCode } = req.body;
-    const studentId = req.user._id;
+    const studentId = req.user.id;
 
-    const team = await Team.findOne({ teamCode: teamCode.toUpperCase() });
-    if (!team) {
+    // Find team by code
+    const { data: team, error: teamError } = await supabaseAdmin
+      .from('teams')
+      .select('*, members:team_members(student_id)')
+      .eq('team_code', teamCode.toUpperCase())
+      .single();
+
+    if (teamError || !team) {
       return res.status(404).json({ success: false, message: 'Team not found. Check the code.' });
     }
 
-    // Check if registered for the event
-    const registration = await Registration.findOne({ student: studentId, event: team.event });
+    // Check registered for event
+    const { data: registration } = await supabaseAdmin
+      .from('registrations')
+      .select('id')
+      .eq('student_id', studentId)
+      .eq('event_id', team.event_id)
+      .maybeSingle();
+
     if (!registration) {
       return res.status(400).json({ success: false, message: 'You must register for the event first' });
     }
 
-    // Check if already in a team
-    const existingTeam = await Team.findOne({ event: team.event, members: studentId });
+    // Check not already in a team for this event
+    const { data: existingTeam } = await supabaseAdmin
+      .from('teams')
+      .select('id, team_members!inner(student_id)')
+      .eq('event_id', team.event_id)
+      .eq('team_members.student_id', studentId)
+      .maybeSingle();
+
     if (existingTeam) {
       return res.status(400).json({ success: false, message: 'You are already in a team for this event' });
     }
 
     // Check capacity
-    if (team.members.length >= team.maxSize) {
+    const memberCount = team.members?.length || 0;
+    if (memberCount >= team.max_size) {
       return res.status(400).json({ success: false, message: 'Team is full' });
     }
 
-    team.members.push(studentId);
-    await team.save();
+    // Join team
+    const { error: joinError } = await supabaseAdmin.from('team_members').insert({
+      team_id: team.id,
+      student_id: studentId,
+    });
 
-    registration.team = team._id;
-    await registration.save();
+    if (joinError) throw joinError;
 
-    const populated = await Team.findById(team._id)
-      .populate('leader', 'name email')
-      .populate('members', 'name email')
-      .populate('event', 'title');
+    // Update registration
+    await supabaseAdmin
+      .from('registrations')
+      .update({ team_id: team.id })
+      .eq('student_id', studentId)
+      .eq('event_id', team.event_id);
+
+    const populated = await getPopulatedTeam(team.id);
 
     res.json({
       success: true,
@@ -107,10 +174,19 @@ exports.joinTeam = async (req, res) => {
 // GET /api/teams/my
 exports.getMyTeams = async (req, res) => {
   try {
-    const teams = await Team.find({ members: req.user._id })
-      .populate('leader', 'name email')
-      .populate('members', 'name email')
-      .populate('event', 'title date venue');
+    const { data: memberships, error } = await supabaseAdmin
+      .from('team_members')
+      .select('team_id')
+      .eq('student_id', req.user.id);
+
+    if (error) throw error;
+
+    const teamIds = memberships.map((m) => m.team_id);
+    if (teamIds.length === 0) {
+      return res.json({ success: true, data: { teams: [] } });
+    }
+
+    const teams = await Promise.all(teamIds.map(getPopulatedTeam));
 
     res.json({ success: true, data: { teams } });
   } catch (error) {
@@ -121,11 +197,18 @@ exports.getMyTeams = async (req, res) => {
 // GET /api/teams/event/:eventId
 exports.getEventTeams = async (req, res) => {
   try {
-    const teams = await Team.find({ event: req.params.eventId })
-      .populate('leader', 'name email')
-      .populate('members', 'name email');
+    const { data: teams, error } = await supabaseAdmin
+      .from('teams')
+      .select(`
+        *,
+        leader:profiles!leader_id(id, name, email),
+        team_members(student_id, profiles(id, name, email))
+      `)
+      .eq('event_id', req.params.eventId);
 
-    res.json({ success: true, data: { teams } });
+    if (error) throw error;
+
+    res.json({ success: true, data: { teams: teams.map(normalizeTeam) } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -135,27 +218,35 @@ exports.getEventTeams = async (req, res) => {
 exports.kickMember = async (req, res) => {
   try {
     const { id, memberId } = req.params;
-    const team = await Team.findById(id);
-    if (!team) {
+
+    const { data: team, error } = await supabaseAdmin
+      .from('teams')
+      .select('id, leader_id, event_id')
+      .eq('id', id)
+      .single();
+
+    if (error || !team) {
       return res.status(404).json({ success: false, message: 'Team not found' });
     }
-
-    if (team.leader.toString() !== req.user._id.toString()) {
+    if (team.leader_id !== req.user.id) {
       return res.status(403).json({ success: false, message: 'Only team leader can kick members' });
     }
-
-    if (memberId === team.leader.toString()) {
+    if (memberId === team.leader_id) {
       return res.status(400).json({ success: false, message: 'Cannot kick yourself. Use disband instead.' });
     }
 
-    team.members = team.members.filter((m) => m.toString() !== memberId);
-    await team.save();
+    await supabaseAdmin
+      .from('team_members')
+      .delete()
+      .eq('team_id', id)
+      .eq('student_id', memberId);
 
     // Remove team ref from registration
-    await Registration.findOneAndUpdate(
-      { student: memberId, event: team.event },
-      { team: null }
-    );
+    await supabaseAdmin
+      .from('registrations')
+      .update({ team_id: null })
+      .eq('student_id', memberId)
+      .eq('event_id', team.event_id);
 
     res.json({ success: true, message: 'Member kicked from team' });
   } catch (error) {
@@ -166,25 +257,64 @@ exports.kickMember = async (req, res) => {
 // DELETE /api/teams/:id
 exports.disbandTeam = async (req, res) => {
   try {
-    const team = await Team.findById(req.params.id);
-    if (!team) {
+    const { data: team, error } = await supabaseAdmin
+      .from('teams')
+      .select('id, leader_id, event_id')
+      .eq('id', req.params.id)
+      .single();
+
+    if (error || !team) {
       return res.status(404).json({ success: false, message: 'Team not found' });
     }
-
-    if (team.leader.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    if (team.leader_id !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Not authorized' });
     }
 
     // Remove team ref from all registrations
-    await Registration.updateMany(
-      { team: team._id },
-      { team: null }
-    );
+    await supabaseAdmin
+      .from('registrations')
+      .update({ team_id: null })
+      .eq('team_id', team.id);
 
-    await Team.findByIdAndDelete(req.params.id);
+    // Delete team (cascade deletes team_members)
+    await supabaseAdmin.from('teams').delete().eq('id', req.params.id);
 
     res.json({ success: true, message: 'Team disbanded' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// Helpers
+async function getPopulatedTeam(teamId) {
+  const { data } = await supabaseAdmin
+    .from('teams')
+    .select(`
+      *,
+      leader:profiles!leader_id(id, name, email),
+      event:events(id, title),
+      team_members(student_id, member:profiles(id, name, email))
+    `)
+    .eq('id', teamId)
+    .single();
+  return data ? normalizeTeam(data) : null;
+}
+
+function normalizeTeam(team) {
+  if (!team) return null;
+  return {
+    ...team,
+    _id: team.id,
+    teamName: team.team_name,
+    teamCode: team.team_code,
+    maxSize: team.max_size,
+    leader: team.leader ? { ...team.leader, _id: team.leader.id } : team.leader_id,
+    members: (team.team_members || []).map((m) => ({
+      ...(m.member || m.profiles || {}),
+      _id: m.student_id,
+      id: m.student_id,
+    })),
+    event: team.event ? { ...team.event, _id: team.event.id } : team.event_id,
+    createdAt: team.created_at,
+  };
+}

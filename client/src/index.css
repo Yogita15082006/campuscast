@@ -1,22 +1,21 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary-50: #eff6ff;
-  --color-primary-100: #dbeafe;
-  --color-primary-200: #bfdbfe;
-  --color-primary-300: #93c5fd;
-  --color-primary-400: #60a5fa;
-  --color-primary-500: #3b82f6;
-  --color-primary-600: #2563eb;
-  --color-primary-700: #1d4ed8;
-  --color-primary-800: #1e40af;
-  --color-primary-900: #1e3a8a;
+  --color-primary-50: #eef2ff;
+  --color-primary-100: #e0e7ff;
+  --color-primary-200: #c7d2fe;
+  --color-primary-300: #a5b4fc;
+  --color-primary-400: #818cf8;
+  --color-primary-500: #6366f1;
+  --color-primary-600: #4f46e5;
+  --color-primary-700: #4338ca;
+  --color-primary-800: #3730a3;
+  --color-primary-900: #312e81;
+  --color-primary-950: #1e1b4b;
   
-  --color-secondary-50: #f5f3ff;
-  --color-secondary-100: #ede9fe;
-  --color-secondary-500: #8b5cf6;
-  --color-secondary-600: #7c3aed;
-  --color-secondary-900: #4c1d95;
+  --color-dark-bg: #0b0f19;
+  --color-dark-card: #131a2a;
+  --color-dark-border: #1e293b;
 }
 
 @layer base {
@@ -25,7 +24,7 @@
   }
   
   .dark body {
-    @apply bg-gray-900 text-gray-100;
+    @apply bg-[var(--color-dark-bg)] text-gray-100;
   }
 }
 
@@ -35,23 +34,23 @@
   }
   
   .btn-primary {
-    @apply text-white bg-primary-600 hover:bg-primary-700 focus:ring-primary-500;
+    @apply text-white bg-primary-600 hover:bg-primary-500 focus:ring-primary-500;
   }
 
   .btn-secondary {
-    @apply text-primary-700 bg-primary-100 hover:bg-primary-200 focus:ring-primary-500;
+    @apply text-primary-300 bg-primary-900/40 hover:bg-primary-900/60 focus:ring-primary-500;
   }
   
   .btn-danger {
-    @apply text-white bg-red-600 hover:bg-red-700 focus:ring-red-500;
+    @apply text-white bg-red-600 hover:bg-red-500 focus:ring-red-500;
   }
   
   .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden transition-all duration-200 hover:shadow-md;
+    @apply bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden transition-all duration-200;
   }
   
   .dark .card {
-    @apply bg-gray-800 border-gray-700;
+    @apply bg-[var(--color-dark-card)] border-[var(--color-dark-border)];
   }
 
   .input-field {
@@ -59,7 +58,7 @@
   }
 
   .dark .input-field {
-    @apply bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:ring-primary-400 focus:border-primary-400;
+    @apply bg-[var(--color-dark-bg)] border-[var(--color-dark-border)] text-white placeholder-gray-500 focus:ring-primary-500 focus:border-primary-500;
   }
   
   .label {
@@ -68,13 +67,5 @@
   
   .dark .label {
     @apply text-gray-300;
-  }
-
-  .glass-effect {
-    @apply bg-white/80 backdrop-blur-md border-b border-gray-200/50;
-  }
-  
-  .dark .glass-effect {
-    @apply bg-gray-900/80 border-gray-700/50;
   }
 }

@@ -27,6 +27,6 @@ router.post('/admin/login', [
 ], validate, adminLogin);
 
 router.get('/me', protect, getMe);
-// router.post('/admin/seed', seedAdmin); // Disabled for production
+router.post('/admin/seed', seedAdmin); // Run once to create first admin, then disable
 
 module.exports = router;

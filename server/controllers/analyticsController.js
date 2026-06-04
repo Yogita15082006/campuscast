@@ -1,20 +1,34 @@
-const Event = require('../models/Event');
-const Registration = require('../models/Registration');
-const Attendance = require('../models/Attendance');
-const Team = require('../models/Team');
-const Feedback = require('../models/Feedback');
-const ActivityLog = require('../models/ActivityLog');
+const { supabaseAdmin } = require('../config/supabase');
 
 exports.getDashboardStats = async (req, res) => {
   try {
-    const totalEvents = await Event.countDocuments();
-    const totalRegistrations = await Registration.countDocuments();
-    const totalTeams = await Team.countDocuments();
-    const totalAttendance = await Attendance.countDocuments();
-    const totalPresent = await Attendance.countDocuments({ status: 'present' });
-    const attendanceRate = totalRegistrations > 0 ? ((totalPresent / totalRegistrations) * 100).toFixed(1) : 0;
-    const recentActivity = await ActivityLog.find().populate('admin', 'name').sort({ createdAt: -1 }).limit(10);
-    res.json({ success: true, data: { totalEvents, totalRegistrations, totalTeams, totalAttendance, attendanceRate: parseFloat(attendanceRate), recentActivity } });
+    // Use RPC for aggregated stats
+    const { data: stats, error } = await supabaseAdmin.rpc('get_dashboard_stats');
+    if (error) throw error;
+
+    // Recent activity from admin_logs
+    const { data: recentActivity } = await supabaseAdmin
+      .from('admin_logs')
+      .select('*, admin:profiles!admin_id(name)')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    res.json({
+      success: true,
+      data: {
+        totalEvents: stats.totalEvents,
+        totalRegistrations: stats.totalRegistrations,
+        totalTeams: stats.totalTeams,
+        totalAttendance: stats.totalAttendance,
+        attendanceRate: stats.attendanceRate,
+        recentActivity: (recentActivity || []).map((log) => ({
+          ...log,
+          _id: log.id,
+          admin: log.admin ? { ...log.admin, _id: log.admin_id } : null,
+          createdAt: log.created_at,
+        })),
+      },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -22,14 +36,23 @@ exports.getDashboardStats = async (req, res) => {
 
 exports.getRegistrationAnalytics = async (req, res) => {
   try {
-    const events = await Event.find().select('title');
-    const data = [];
-    for (const event of events) {
-      const count = await Registration.countDocuments({ event: event._id });
-      data.push({ eventTitle: event.title, registrations: count });
-    }
-    const total = await Registration.countDocuments();
-    res.json({ success: true, data: { chartData: data, total } });
+    const { data, error } = await supabaseAdmin.rpc('get_registration_analytics');
+    if (error) throw error;
+
+    const { count: total } = await supabaseAdmin
+      .from('registrations')
+      .select('*', { count: 'exact', head: true });
+
+    res.json({
+      success: true,
+      data: {
+        chartData: (data || []).map((row) => ({
+          eventTitle: row.event_title,
+          registrations: Number(row.registrations),
+        })),
+        total: total || 0,
+      },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -37,17 +60,24 @@ exports.getRegistrationAnalytics = async (req, res) => {
 
 exports.getAttendanceAnalytics = async (req, res) => {
   try {
-    const events = await Event.find().select('title');
-    const data = [];
-    let totalPresent = 0, totalRegistered = 0;
-    for (const event of events) {
-      const registered = await Registration.countDocuments({ event: event._id });
-      const present = await Attendance.countDocuments({ event: event._id, status: 'present' });
-      totalPresent += present;
-      totalRegistered += registered;
-      data.push({ eventTitle: event.title, registered, present, absent: registered - present, percentage: registered > 0 ? ((present / registered) * 100).toFixed(1) : 0 });
-    }
-    res.json({ success: true, data: { chartData: data, totalPresent, totalAbsent: totalRegistered - totalPresent } });
+    const { data, error } = await supabaseAdmin.rpc('get_attendance_analytics');
+    if (error) throw error;
+
+    const chartData = (data || []).map((row) => ({
+      eventTitle: row.event_title,
+      registered: Number(row.registered),
+      present: Number(row.present),
+      absent: Number(row.absent),
+      percentage: parseFloat(row.percentage),
+    }));
+
+    const totalPresent = chartData.reduce((s, r) => s + r.present, 0);
+    const totalAbsent = chartData.reduce((s, r) => s + r.absent, 0);
+
+    res.json({
+      success: true,
+      data: { chartData, totalPresent, totalAbsent },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -55,10 +85,16 @@ exports.getAttendanceAnalytics = async (req, res) => {
 
 exports.getTeamAnalytics = async (req, res) => {
   try {
-    const teams = await Team.find();
-    const totalTeams = teams.length;
-    const avgSize = totalTeams > 0 ? (teams.reduce((s, t) => s + t.members.length, 0) / totalTeams).toFixed(1) : 0;
-    res.json({ success: true, data: { totalTeams, averageSize: parseFloat(avgSize) } });
+    const { data, error } = await supabaseAdmin.rpc('get_team_analytics');
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      data: {
+        totalTeams: Number(data.totalTeams || 0),
+        averageSize: parseFloat(data.averageSize || 0),
+      },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -66,12 +102,17 @@ exports.getTeamAnalytics = async (req, res) => {
 
 exports.getFeedbackAnalytics = async (req, res) => {
   try {
-    const feedbacks = await Feedback.find();
-    const total = feedbacks.length;
-    const avg = total > 0 ? (feedbacks.reduce((s, f) => s + f.rating, 0) / total).toFixed(1) : 0;
-    const distribution = [0, 0, 0, 0, 0];
-    feedbacks.forEach((f) => { distribution[f.rating - 1]++; });
-    res.json({ success: true, data: { averageRating: parseFloat(avg), total, distribution } });
+    const { data, error } = await supabaseAdmin.rpc('get_feedback_analytics');
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      data: {
+        averageRating: parseFloat(data.averageRating || 0),
+        total: Number(data.total || 0),
+        distribution: data.distribution || [0, 0, 0, 0, 0],
+      },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

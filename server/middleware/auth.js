@@ -1,6 +1,9 @@
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const { supabaseAdmin } = require('../config/supabase');
 
+/**
+ * protect — validates Supabase JWT from Authorization: Bearer header.
+ * Fetches the user's profile from the profiles table and attaches to req.user.
+ */
 const protect = async (req, res, next) => {
   try {
     let token;
@@ -12,12 +15,32 @@ const protect = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Not authorized, no token provided' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id);
+    // Validate token with Supabase Auth
+    const { data: { user: authUser }, error: authError } = await supabaseAdmin.auth.getUser(token);
 
-    if (!req.user) {
-      return res.status(401).json({ success: false, message: 'User not found' });
+    if (authError || !authUser) {
+      return res.status(401).json({ success: false, message: 'Not authorized, token invalid' });
     }
+
+    // Fetch profile (name, role, etc.)
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('id', authUser.id)
+      .single();
+
+    if (profileError || !profile) {
+      return res.status(401).json({ success: false, message: 'User profile not found' });
+    }
+
+    // Attach user to request (same shape as before)
+    req.user = {
+      _id: profile.id,      // keep _id alias for backward compat with all controllers
+      id: profile.id,
+      name: profile.name,
+      email: profile.email,
+      role: profile.role,
+    };
 
     next();
   } catch (error) {

@@ -1,16 +1,13 @@
 const PDFDocument = require('pdfkit');
-const path = require('path');
-const fs = require('fs');
 
-const certsDir = path.join(__dirname, '..', 'certificates');
-if (!fs.existsSync(certsDir)) {
-  fs.mkdirSync(certsDir, { recursive: true });
-}
-
+/**
+ * generateCertificatePDF
+ * Returns a Buffer (for Supabase Storage upload) and the fileName.
+ * No longer writes to disk.
+ */
 const generateCertificatePDF = (studentName, eventName, eventDate, organizerName, certificateId) => {
   return new Promise((resolve, reject) => {
     const fileName = `certificate-${certificateId}.pdf`;
-    const filePath = path.join(certsDir, fileName);
 
     const doc = new PDFDocument({
       layout: 'landscape',
@@ -18,8 +15,10 @@ const generateCertificatePDF = (studentName, eventName, eventDate, organizerName
       margins: { top: 50, bottom: 50, left: 50, right: 50 },
     });
 
-    const stream = fs.createWriteStream(filePath);
-    doc.pipe(stream);
+    const chunks = [];
+    doc.on('data', (chunk) => chunks.push(chunk));
+    doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), fileName }));
+    doc.on('error', reject);
 
     // Background
     doc.rect(0, 0, doc.page.width, doc.page.height).fill('#fefefe');
@@ -42,7 +41,6 @@ const generateCertificatePDF = (studentName, eventName, eventDate, organizerName
 
     // Body
     doc.fontSize(14).fillColor('#555').font('Helvetica').text('This is to certify that', 0, 195, { align: 'center' });
-
     doc.fontSize(28).fillColor('#333').font('Helvetica-Bold').text(studentName, 0, 225, { align: 'center' });
 
     // Underline name
@@ -51,7 +49,6 @@ const generateCertificatePDF = (studentName, eventName, eventDate, organizerName
     doc.moveTo(nameX, 258).lineTo(nameX + nameWidth, 258).lineWidth(1).stroke('#667eea');
 
     doc.fontSize(14).fillColor('#555').font('Helvetica').text('has successfully participated in', 0, 275, { align: 'center' });
-
     doc.fontSize(22).fillColor('#764ba2').font('Helvetica-Bold').text(`"${eventName}"`, 0, 305, { align: 'center' });
 
     const formattedDate = new Date(eventDate).toLocaleDateString('en-US', {
@@ -70,9 +67,6 @@ const generateCertificatePDF = (studentName, eventName, eventDate, organizerName
     doc.fontSize(14).fillColor('#667eea').text('★ ★ ★', 0, 490, { align: 'center' });
 
     doc.end();
-
-    stream.on('finish', () => resolve({ filePath, fileName }));
-    stream.on('error', reject);
   });
 };
 

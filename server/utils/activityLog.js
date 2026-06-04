@@ -1,12 +1,12 @@
-const ActivityLog = require('../models/ActivityLog');
+const { supabaseAdmin } = require('../config/supabase');
 
 const logActivity = async (adminId, action, entity, entityId = null, details = '') => {
   try {
-    await ActivityLog.create({
-      admin: adminId,
+    await supabaseAdmin.from('admin_logs').insert({
+      admin_id: adminId || null,
       action,
       entity,
-      entityId,
+      entity_id: entityId ? entityId.toString() : null,
       details,
     });
   } catch (error) {
