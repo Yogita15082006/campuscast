@@ -1,8 +1,10 @@
 const express = require('express');
 const http = require('http');
+const path = require('path');
 const { Server } = require('socket.io');
 const cors = require('cors');
 require('dotenv').config();
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 // Initialize Supabase clients (will throw if env vars missing)
 require('./config/supabase');

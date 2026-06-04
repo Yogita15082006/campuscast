@@ -94,7 +94,7 @@ const AdminEvents = () => {
         submitData.append(key, formData[key]);
       });
       if (posterFile) {
-        submitData.append('poster', posterFile);
+        submitData.append('posterImage', posterFile);
       }
 
       if (isEditing) {

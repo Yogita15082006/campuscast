@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { supabase } from '../config/supabase';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
@@ -6,8 +7,9 @@ const api = axios.create({
 
 // Add a request interceptor
 api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
+  async (config) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -25,7 +27,9 @@ api.interceptors.response.use(
     if (error.response && error.response.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = '/login';
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

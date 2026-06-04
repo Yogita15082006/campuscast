@@ -18,12 +18,17 @@ exports.register = async (req, res) => {
       return res.status(400).json({ success: false, message: error.message });
     }
 
+    await ensureProfile(data.user, { name, role: 'student' });
+
     if (!data.session) {
       // Supabase email confirmation required — but we'll still return success
       return res.status(201).json({
         success: true,
         message: 'Registration successful. Please confirm your email if required.',
-        data: { user: { id: data.user.id, email: data.user.email, name, role: 'student' } },
+        data: {
+          requiresEmailConfirmation: true,
+          user: { id: data.user.id, email: data.user.email, name, role: 'student' },
+        },
       });
     }
 
@@ -52,11 +57,15 @@ exports.login = async (req, res) => {
     }
 
     // Fetch profile to get name and role
+    const profile = await ensureProfile(data.user, { role: 'student' });
+
+    /*
     const { data: profile } = await supabaseAdmin
       .from('profiles')
       .select('*')
       .eq('id', data.user.id)
       .single();
+    */
 
     const token = data.session.access_token;
     const user = {
@@ -89,11 +98,15 @@ exports.adminLogin = async (req, res) => {
     }
 
     // Verify admin role
+    const profile = await ensureProfile(data.user);
+
+    /*
     const { data: profile } = await supabaseAdmin
       .from('profiles')
       .select('*')
       .eq('id', data.user.id)
       .single();
+    */
 
     if (!profile || profile.role !== 'admin') {
       return res.status(401).json({ success: false, message: 'Invalid admin credentials' });
@@ -117,6 +130,34 @@ exports.adminLogin = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+async function ensureProfile(authUser, defaults = {}) {
+  if (!authUser) return null;
+
+  const { data: existing } = await supabaseAdmin
+    .from('profiles')
+    .select('*')
+    .eq('id', authUser.id)
+    .maybeSingle();
+
+  if (existing) return existing;
+
+  const profile = {
+    id: authUser.id,
+    name: defaults.name || authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'Student',
+    email: authUser.email,
+    role: defaults.role || authUser.user_metadata?.role || 'student',
+  };
+
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .upsert(profile)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return data;
+}
 
 // GET /api/auth/me
 exports.getMe = async (req, res) => {

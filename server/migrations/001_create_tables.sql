@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS public.events (
   description           TEXT,
   category              TEXT NOT NULL DEFAULT 'general',
   date                  TIMESTAMPTZ NOT NULL,
+  time                  TEXT,
   registration_deadline TIMESTAMPTZ,
   venue                 TEXT,
   total_seats           INTEGER NOT NULL DEFAULT 100,

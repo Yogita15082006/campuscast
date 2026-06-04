@@ -187,11 +187,24 @@ exports.exportRegistrations = async (req, res) => {
 
 function normalizeRegistration(reg) {
   if (!reg) return null;
+  const event = reg.event ? {
+    ...reg.event,
+    _id: reg.event.id,
+    registrationDeadline: reg.event.registration_deadline,
+    totalSeats: reg.event.total_seats,
+    capacity: reg.event.total_seats,
+    remainingSeats: reg.event.remaining_seats,
+    isTeamEvent: reg.event.is_team_event,
+    teamSizeLimit: reg.event.team_size_limit,
+    posterImage: reg.event.poster_image,
+    createdAt: reg.event.created_at,
+  } : reg.event_id;
+
   return {
     ...reg,
     _id: reg.id,
     student: reg.student ? { ...reg.student, _id: reg.student.id } : reg.student_id,
-    event: reg.event ? { ...reg.event, _id: reg.event.id } : reg.event_id,
+    event,
     team: reg.team ? { ...reg.team, _id: reg.team.id } : reg.team_id,
     createdAt: reg.created_at,
   };

@@ -1,7 +1,7 @@
 const { supabaseAdmin } = require('../config/supabase');
 
-// Helper: generate random 6-char uppercase team code
-const generateTeamCode = () => Math.random().toString(36).substring(2, 8).toUpperCase();
+// Helper: generate random 8-char uppercase team code
+const generateTeamCode = () => Math.random().toString(36).substring(2, 10).toUpperCase().padEnd(8, '0');
 
 // POST /api/teams
 exports.createTeam = async (req, res) => {

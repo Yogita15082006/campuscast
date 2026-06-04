@@ -23,14 +23,31 @@ const protect = async (req, res, next) => {
     }
 
     // Fetch profile (name, role, etc.)
-    const { data: profile, error: profileError } = await supabaseAdmin
+    let { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('*')
       .eq('id', authUser.id)
-      .single();
+      .maybeSingle();
 
     if (profileError || !profile) {
-      return res.status(401).json({ success: false, message: 'User profile not found' });
+      const fallbackProfile = {
+        id: authUser.id,
+        name: authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'Student',
+        email: authUser.email,
+        role: authUser.user_metadata?.role === 'admin' ? 'admin' : 'student',
+      };
+
+      const { data: createdProfile, error: createProfileError } = await supabaseAdmin
+        .from('profiles')
+        .upsert(fallbackProfile)
+        .select('*')
+        .single();
+
+      if (createProfileError || !createdProfile) {
+        return res.status(401).json({ success: false, message: 'User profile not found' });
+      }
+
+      profile = createdProfile;
     }
 
     // Attach user to request (same shape as before)

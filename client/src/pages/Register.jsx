@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../config/supabase';
+import { signInWithGoogle } from '../utils/googleAuth';
 import { FiUser, FiMail, FiLock } from 'react-icons/fi';
-import toast from 'react-hot-toast';
 
 const Register = () => {
   const [formData, setFormData] = useState({ name: '', email: '', password: '' });
@@ -20,23 +19,15 @@ const Register = () => {
     setIsLoading(true);
     const res = await register(formData.name, formData.email, formData.password);
     setIsLoading(false);
-    if (res.success) {
+    if (res.success && !res.requiresEmailConfirmation) {
       navigate('/student/dashboard');
+    } else if (res.requiresEmailConfirmation) {
+      navigate('/login');
     }
   };
 
   const handleGoogleLogin = async () => {
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/student/dashboard`
-        }
-      });
-      if (error) throw error;
-    } catch (error) {
-      toast.error('Google login failed: ' + error.message);
-    }
+    await signInWithGoogle();
   };
 
   return (

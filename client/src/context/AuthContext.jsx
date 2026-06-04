@@ -16,7 +16,7 @@ export const AuthProvider = ({ children }) => {
       try {
         // First try to grab session from Supabase (Google OAuth flow)
         const { data: { session } } = await supabase.auth.getSession();
-        let token = session?.access_token || localStorage.getItem('token');
+        const token = session?.access_token || localStorage.getItem('token');
 
         if (token) {
           // Keep our custom local storage in sync
@@ -36,10 +36,15 @@ export const AuthProvider = ({ children }) => {
     checkLoggedIn();
 
     // Subscribe to Supabase Auth State changes for OAuth redirects
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
         localStorage.setItem('token', session.access_token);
-        // User profile will be fetched on reload or next render
+        try {
+          const res = await api.get('/auth/me');
+          setUser(res.data.data.user);
+        } catch (error) {
+          console.error('Auth profile fetch failed:', error);
+        }
       } else if (event === 'SIGNED_OUT') {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -58,7 +63,7 @@ export const AuthProvider = ({ children }) => {
       const res = await api.post(endpoint, { email, password });
 
       const { user, token } = res.data.data;
-      localStorage.setItem('token', token);
+      if (token) localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
       setUser(user);
 
@@ -75,7 +80,12 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await api.post('/auth/register', { name, email, password });
 
-      const { user, token } = res.data.data;
+      const { user, token, requiresEmailConfirmation } = res.data.data;
+      if (requiresEmailConfirmation || !token) {
+        toast.success(res.data.message);
+        return { success: true, requiresEmailConfirmation: true };
+      }
+
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
       setUser(user);
@@ -89,7 +99,8 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut();
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);

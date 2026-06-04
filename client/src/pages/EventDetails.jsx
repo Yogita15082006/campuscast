@@ -28,10 +28,8 @@ const EventDetails = () => {
       // Check if user is already registered (if possible from the event data, or we could fetch user's registrations)
       // Since it might not be directly in event data unless populated, we fetch user's registrations
       if (user?.role === 'student') {
-        const regRes = await api.get('/registrations/my-registrations');
-        const registrations = regRes.data.data.registrations;
-        const isRegistered = registrations.some(reg => reg.event._id === id);
-        setHasRegistered(isRegistered);
+        const regRes = await api.get(`/registrations/check/${id}`);
+        setHasRegistered(regRes.data.data.isRegistered);
       }
     } catch (error) {
       toast.error('Failed to load event details');
@@ -68,8 +66,10 @@ const EventDetails = () => {
   const handleCancelRegistration = async () => {
     try {
       setRegistering(true);
-      // We might need registration ID, or a specific endpoint to cancel by event ID
-      await api.delete(`/registrations/event/${id}`);
+      const regRes = await api.get(`/registrations/check/${id}`);
+      const registrationId = regRes.data.data.registration?._id;
+      if (!registrationId) throw new Error('Registration not found');
+      await api.delete(`/registrations/${registrationId}`);
       toast.success('Registration cancelled');
       setHasRegistered(false);
       

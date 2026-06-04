@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../config/supabase';
+import { signInWithGoogle } from '../utils/googleAuth';
 import { FiMail, FiLock } from 'react-icons/fi';
-import toast from 'react-hot-toast';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -40,17 +39,7 @@ const Login = () => {
   };
 
   const handleGoogleLogin = async () => {
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/student/dashboard`
-        }
-      });
-      if (error) throw error;
-    } catch (error) {
-      toast.error('Google login failed: ' + error.message);
-    }
+    await signInWithGoogle();
   };
 
   return (

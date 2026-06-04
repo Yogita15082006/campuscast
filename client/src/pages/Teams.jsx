@@ -32,7 +32,7 @@ const Teams = () => {
   const fetchMyTeams = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/teams/my-teams');
+      const res = await api.get('/teams/my');
       setTeams(res.data.data.teams);
     } catch (error) {
       toast.error('Failed to load teams');
@@ -43,7 +43,7 @@ const Teams = () => {
 
   const fetchTeamEvents = async () => {
     try {
-      const regRes = await api.get('/registrations/my-registrations');
+      const regRes = await api.get('/registrations/my');
       const registrations = regRes.data.data.registrations;
       const tEvents = registrations
         .map(reg => reg.event)
@@ -58,7 +58,7 @@ const Teams = () => {
     e.preventDefault();
     try {
       setCreating(true);
-      await api.post('/teams/create', createData);
+      await api.post('/teams', { teamName: createData.name, eventId: createData.eventId });
       toast.success('Team created successfully!');
       setShowCreateModal(false);
       setCreateData({ name: '', eventId: '' });
@@ -74,7 +74,7 @@ const Teams = () => {
     e.preventDefault();
     try {
       setJoining(true);
-      await api.post('/teams/join', { joinCode });
+      await api.post('/teams/join', { teamCode: joinCode });
       toast.success('Successfully joined team!');
       setShowJoinModal(false);
       setJoinCode('');
@@ -300,7 +300,7 @@ const Teams = () => {
                   placeholder="CODE"
                   value={joinCode}
                   onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                  maxLength={6}
+                  maxLength={8}
                 />
               </div>
               <div className="flex gap-3 pt-4">
