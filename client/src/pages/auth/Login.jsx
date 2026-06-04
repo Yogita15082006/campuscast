@@ -1,15 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff, Radio, Loader2, GraduationCap, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { mockData } from '../../data/mockData';
 import DarkModeToggle from '../../components/DarkModeToggle';
 import toast from 'react-hot-toast';
-
-const DEMO = {
-  student: { email: 'alex@university.edu', password: 'student123' },
-  admin:   { email: 'admin@university.edu', password: 'admin123' },
-};
 
 const inp = (err) => ({
   width: '100%', height: '40px', padding: '0 12px', borderRadius: '10px',
@@ -18,17 +12,30 @@ const inp = (err) => ({
   transition: 'border-color 0.2s', boxSizing: 'border-box'
 });
 
+const GoogleIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 48 48">
+    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+  </svg>
+);
+
 export default function Login() {
   const [tab, setTab] = useState('student');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState({});
-  const { login } = useAuth();
+  const { currentUser, login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
 
-  const fillDemo = () => { setEmail(DEMO[tab].email); setPassword(DEMO[tab].password); setErrors({}); };
+  useEffect(() => {
+    if (!currentUser) return;
+    navigate(currentUser.role === 'admin' ? '/admin/dashboard' : '/student/dashboard', { replace: true });
+  }, [currentUser, navigate]);
 
   const validate = () => {
     const e = {};
@@ -42,23 +49,18 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault(); if (!validate()) return;
     setLoading(true);
-    await new Promise(r => setTimeout(r, 900));
-    login(tab); setLoading(false);
-    navigate(tab === 'admin' ? '/admin/dashboard' : '/student/dashboard');
-    setTimeout(() => {
-      const ann = mockData.announcements[0];
-      toast.custom(() => (
-        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '14px', padding: '14px 16px', display: 'flex', gap: '12px', maxWidth: '340px', boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }}>
-          <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(79,70,229,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Radio size={16} color="var(--primary)" />
-          </div>
-          <div>
-            <p style={{ fontSize: '13px', fontWeight: 700, color: 'var(--foreground)' }}>{ann.title}</p>
-            <p style={{ fontSize: '12px', color: 'var(--muted-foreground)', marginTop: '2px' }}>{ann.message.slice(0, 70)}…</p>
-          </div>
-        </div>
-      ), { duration: 5000 });
-    }, 5000);
+    const result = await login(email, password, tab === 'admin');
+    setLoading(false);
+    if (result.success) {
+      navigate(result.role === 'admin' ? '/admin/dashboard' : '/student/dashboard', { replace: true });
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true);
+    const result = await loginWithGoogle();
+    if (!result.success) setGoogleLoading(false);
+    // Redirect happens via Supabase; setGoogleLoading stays true until page unloads
   };
 
   const label = { fontSize: '13px', fontWeight: 600, color: 'var(--foreground)', display: 'block', marginBottom: '6px' };
@@ -94,25 +96,43 @@ export default function Login() {
             ))}
           </div>
 
-          {/* Demo banner */}
-          <div style={{ background: 'rgba(79,70,229,0.06)', border: '1px solid rgba(79,70,229,0.2)', borderRadius: '10px', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-            <div>
-              <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)' }}>Demo Account</p>
-              <p style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginTop: '1px' }}>{DEMO[tab].email} / {DEMO[tab].password}</p>
-            </div>
-            <button onClick={fillDemo} style={{ padding: '5px 12px', borderRadius: '8px', border: '1px solid rgba(79,70,229,0.3)', background: 'transparent', color: 'var(--primary)', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}>Auto-fill</button>
-          </div>
+          {/* Google Sign-In (student tab only) */}
+          {tab === 'student' && (
+            <>
+              <button onClick={handleGoogleLogin} disabled={googleLoading} style={{
+                width: '100%', padding: '11px', borderRadius: '10px',
+                border: '1px solid var(--border)', background: 'var(--card)',
+                color: 'var(--foreground)', fontWeight: 600, fontSize: '14px',
+                cursor: googleLoading ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                transition: 'all 0.15s', opacity: googleLoading ? 0.7 : 1,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+              }}
+                onMouseEnter={e => { if (!googleLoading) e.currentTarget.style.background = 'var(--muted)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--card)'; }}
+              >
+                {googleLoading ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <GoogleIcon />}
+                {googleLoading ? 'Redirecting to Google…' : 'Continue with Google'}
+              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+                <span style={{ fontSize: '12px', color: 'var(--muted-foreground)', fontWeight: 500 }}>or sign in with email</span>
+                <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+              </div>
+            </>
+          )}
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div>
               <label style={label}>Email</label>
-              <input type="email" placeholder={DEMO[tab].email} value={email} onChange={e => setEmail(e.target.value)} style={inp(errors.email)} />
+              <input type="email" placeholder={tab === 'admin' ? 'admin@campuscast.com' : 'student@college.edu'} value={email} onChange={e => setEmail(e.target.value)} style={inp(errors.email)} />
               {errors.email && <p style={errTxt}>{errors.email}</p>}
             </div>
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <label style={{ ...label, marginBottom: 0 }}>Password</label>
-                <button type="button" onClick={() => toast('Password reset link sent! (demo)', { icon: '📧' })} style={{ fontSize: '12px', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Forgot password?</button>
+                <button type="button" onClick={() => toast('Password reset is not configured yet.', { icon: '📧' })} style={{ fontSize: '12px', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Forgot password?</button>
               </div>
               <div style={{ position: 'relative' }}>
                 <input type={showPw ? 'text' : 'password'} placeholder="Enter your password" value={password} onChange={e => setPassword(e.target.value)} style={{ ...inp(errors.password), paddingRight: '40px' }} />

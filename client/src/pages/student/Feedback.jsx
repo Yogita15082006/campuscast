@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { CheckCircle } from 'lucide-react';
 import StudentLayout from '../../layouts/StudentLayout';
 import FeedbackStars from '../../components/FeedbackStars';
-import { mockData } from '../../data/mockData';
+import api from '../../utils/api';
 import toast from 'react-hot-toast';
 
 export default function Feedback() {
@@ -13,9 +13,24 @@ export default function Feedback() {
   const [suggestions, setSuggestions] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  useEffect(() => { const t = setTimeout(() => setLoading(false), 800); return () => clearTimeout(t); }, []);
+  const [attendedEvents, setAttendedEvents] = useState([]);
 
-  const pending = mockData.feedback.filter(f => f.status === 'Pending');
+  useEffect(() => {
+    const fetchAttendedEvents = async () => {
+      try {
+        setLoading(true);
+        const res = await api.get('/attendance/my');
+        // Only show events they attended
+        setAttendedEvents(res.data.data.attendance || []);
+      } catch (error) {
+        toast.error('Failed to load attended events');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAttendedEvents();
+  }, []);
+
   const inp = { width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--foreground)', fontSize: '14px', outline: 'none', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' };
   const lb = { fontSize: '13px', fontWeight: 600, color: 'var(--foreground)', display: 'block', marginBottom: '8px' };
 
@@ -23,10 +38,16 @@ export default function Feedback() {
     e.preventDefault();
     if (!event) return toast.error('Please select an event');
     if (rating === 0) return toast.error('Please provide a rating');
-    setSubmitting(true);
-    await new Promise(r => setTimeout(r, 900));
-    setSubmitted(true); setSubmitting(false);
-    toast.success('Feedback submitted successfully!');
+    try {
+      setSubmitting(true);
+      await api.post('/feedback', { eventId: event, rating, comment, suggestions });
+      setSubmitted(true);
+      toast.success('Feedback submitted successfully!');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to submit feedback');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -48,20 +69,24 @@ export default function Feedback() {
           </div>
         ) : (
           <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '20px', padding: '28px' }}>
-            {loading ? <div style={{ height: '300px' }} className="skeleton" /> : (
+            {loading ? <div style={{ height: '300px' }} className="skeleton" /> : attendedEvents.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px' }}>
+                <p style={{ color: 'var(--muted-foreground)', fontSize: '14px' }}>You need to attend an event before submitting feedback.</p>
+              </div>
+            ) : (
               <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <div>
                   <label style={lb}>Select Event</label>
                   <select value={event} onChange={e => setEvent(e.target.value)} style={{ ...inp, height: '42px', cursor: 'pointer' }}>
                     <option value="">Choose a completed event…</option>
-                    {pending.map(f => <option key={f.id} value={f.id}>{f.eventName}</option>)}
+                    {attendedEvents.map(att => <option key={att.event?.id || att.id} value={att.event?.id || att.event_id}>{att.event?.title}</option>)}
                   </select>
                 </div>
                 <div>
                   <label style={lb}>Overall Rating</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <FeedbackStars value={rating} onChange={setRating} />
-                    {rating > 0 && <span style={{ fontSize: '13px', color: 'var(--muted-foreground)', fontWeight: 600 }}>{['','Poor','Fair','Good','Very Good','Excellent'][rating]}</span>}
+                    {rating > 0 && <span style={{ fontSize: '13px', color: 'var(--muted-foreground)', fontWeight: 600 }}>{['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'][rating]}</span>}
                   </div>
                 </div>
                 <div>

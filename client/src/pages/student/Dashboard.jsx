@@ -6,19 +6,55 @@ import StatCard from '../../components/StatCard';
 import { PageSkeleton } from '../../components/LoadingSkeleton';
 import StatusBadge from '../../components/StatusBadge';
 import EventCard from '../../components/EventCard';
-import { mockData } from '../../data/mockData';
 import { useAuth } from '../../context/AuthContext';
+import api from '../../utils/api';
+import toast from 'react-hot-toast';
 
 export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const { currentUser } = useAuth();
-  useEffect(() => { const t = setTimeout(() => setLoading(false), 800); return () => clearTimeout(t); }, []);
+
+  const [attendance, setAttendance] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [registrations, setRegistrations] = useState([]);
+  const [certificates, setCertificates] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        // Using Promise.allSettled to ensure dashboard loads even if one API fails temporarily
+        const [attRes, evtRes, regRes, certRes, annRes] = await Promise.allSettled([
+          api.get('/attendance/my'),
+          api.get('/events?status=upcoming&limit=4'),
+          api.get('/registrations/my'),
+          api.get('/certificates/my'),
+          api.get('/announcements?limit=4')
+        ]);
+
+        if (attRes.status === 'fulfilled') setAttendance(attRes.value.data.data.attendance || []);
+        if (evtRes.status === 'fulfilled') setEvents(evtRes.value.data.data.events || []);
+        if (regRes.status === 'fulfilled') setRegistrations(regRes.value.data.data.registrations || []);
+        if (certRes.status === 'fulfilled') setCertificates(certRes.value.data.data.certificates || []);
+        if (annRes.status === 'fulfilled') setAnnouncements(annRes.value.data.data.announcements || []);
+
+      } catch (error) {
+        toast.error('Error fetching dashboard data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
   if (loading) return <StudentLayout><PageSkeleton /></StudentLayout>;
 
-  const present = mockData.attendance.filter(a => a.status === 'Present').length;
-  const total = mockData.attendance.length;
+  const present = attendance.filter(a => a.status === 'Present' || a.status === 'present').length;
+  const total = attendance.length;
   const pct = total > 0 ? Math.round((present / total) * 100) : 0;
-  const upcoming = mockData.events.filter(e => e.status === 'upcoming').slice(0, 3);
+  const upcoming = events.slice(0, 3);
 
   return (
     <StudentLayout>
@@ -30,7 +66,7 @@ export default function StudentDashboard() {
             <p style={{ fontSize: '13px', opacity: 0.75, marginBottom: '4px', fontWeight: 500 }}>Good day,</p>
             <h1 style={{ fontSize: '24px', fontWeight: 800, marginBottom: '6px' }}>{currentUser?.name} 👋</h1>
             <p style={{ fontSize: '13px', opacity: 0.75, marginBottom: '20px' }}>
-              You have {mockData.registrations.length} registered events and {mockData.certificates.length} certificates earned.
+              You have {registrations.length} registered events and {certificates.length} certificates earned.
             </p>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <Link to="/events" style={{ padding: '8px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.2)', color: '#fff', fontWeight: 700, fontSize: '13px', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px', border: '1px solid rgba(255,255,255,0.2)', backdropFilter: 'blur(4px)' }}>
@@ -45,13 +81,13 @@ export default function StudentDashboard() {
 
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
-          <StatCard label="Upcoming Events" value={mockData.events.filter(e => e.status === 'upcoming').length} icon={<Calendar size={16} />} iconBg="rgba(79,70,229,0.1)" iconColor="#4F46E5" />
-          <StatCard label="Registrations" value={mockData.registrations.length} icon={<ClipboardList size={16} />} iconBg="rgba(124,58,237,0.1)" iconColor="#7C3AED" trend={{ value: 12, label: 'this month' }} />
+          <StatCard label="Upcoming Events" value={events.length} icon={<Calendar size={16} />} iconBg="rgba(79,70,229,0.1)" iconColor="#4F46E5" />
+          <StatCard label="Registrations" value={registrations.length} icon={<ClipboardList size={16} />} iconBg="rgba(124,58,237,0.1)" iconColor="#7C3AED" />
           <StatCard label="Attendance" value={`${pct}%`} icon={<CheckSquare size={16} />} iconBg="rgba(16,185,129,0.1)" iconColor="#10B981" />
-          <StatCard label="Certificates" value={mockData.certificates.length} icon={<Award size={16} />} iconBg="rgba(245,158,11,0.1)" iconColor="#F59E0B" />
+          <StatCard label="Certificates" value={certificates.length} icon={<Award size={16} />} iconBg="rgba(245,158,11,0.1)" iconColor="#F59E0B" />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: '24px' }}>
           {/* Registrations */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
@@ -59,23 +95,26 @@ export default function StudentDashboard() {
               <Link to="/student/registrations" style={{ fontSize: '12px', color: 'var(--primary)', textDecoration: 'none', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '2px' }}>View all <ArrowRight size={12} /></Link>
             </div>
             <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px', overflow: 'hidden' }}>
-              {mockData.registrations.slice(0, 4).map((reg, i) => (
-                <div key={reg.id} style={{
-                  display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 18px',
-                  borderBottom: i < 3 ? '1px solid var(--border)' : 'none',
-                  transition: 'background 0.15s', cursor: 'pointer'
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = 'var(--muted)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(79,70,229,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Calendar size={16} color="#4F46E5" />
+              {registrations.length === 0 && <div style={{ padding: '20px', color: 'var(--muted-foreground)', fontSize: '13px', textAlign: 'center' }}>No registrations found.</div>}
+              {registrations.slice(0, 4).map((reg, i) => (
+                <Link to={`/events/${reg.event?.id || reg.event?._id}`} key={reg.id || i} style={{ textDecoration: 'none' }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 18px',
+                    borderBottom: i < Math.min(3, registrations.length - 1) ? '1px solid var(--border)' : 'none',
+                    transition: 'background 0.15s', cursor: 'pointer'
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--muted)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(79,70,229,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Calendar size={16} color="#4F46E5" />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{reg.event?.title}</p>
+                      <p style={{ fontSize: '12px', color: 'var(--muted-foreground)', marginTop: '2px' }}>{new Date(reg.event?.date).toLocaleDateString()} · {reg.event?.venue}</p>
+                    </div>
+                    <StatusBadge status={reg.status || 'registered'} />
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{reg.eventName}</p>
-                    <p style={{ fontSize: '12px', color: 'var(--muted-foreground)', marginTop: '2px' }}>{reg.date} · {reg.venue}</p>
-                  </div>
-                  <StatusBadge status={reg.status} />
-                </div>
+                </Link>
               ))}
             </div>
           </div>
@@ -87,20 +126,21 @@ export default function StudentDashboard() {
               <Link to="/student/announcements" style={{ fontSize: '12px', color: 'var(--primary)', textDecoration: 'none', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '2px' }}>All <ArrowRight size={12} /></Link>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {mockData.announcements.slice(0, 4).map(ann => (
+              {announcements.length === 0 && <div style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>No announcements available.</div>}
+              {announcements.slice(0, 4).map(ann => (
                 <Link key={ann.id} to="/student/announcements" style={{ textDecoration: 'none' }}>
                   <div style={{
                     padding: '12px 14px', borderRadius: '12px',
-                    background: ann.unread ? 'rgba(79,70,229,0.06)' : 'var(--card)',
-                    border: `1px solid ${ann.unread ? 'rgba(79,70,229,0.2)' : 'var(--border)'}`,
+                    background: !ann.is_read ? 'rgba(79,70,229,0.06)' : 'var(--card)',
+                    border: `1px solid ${!ann.is_read ? 'rgba(79,70,229,0.2)' : 'var(--border)'}`,
                     display: 'flex', gap: '10px', cursor: 'pointer', transition: 'opacity 0.15s'
                   }}>
-                    <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: ann.unread ? 'var(--primary)' : 'var(--border)', marginTop: '5px', flexShrink: 0 }} />
+                    <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: !ann.is_read ? 'var(--primary)' : 'var(--border)', marginTop: '5px', flexShrink: 0 }} />
                     <div style={{ minWidth: 0 }}>
-                      <p style={{ fontSize: '12px', fontWeight: ann.unread ? 700 : 500, color: ann.unread ? 'var(--foreground)' : 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ann.title}</p>
-                      <p style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginTop: '2px' }}>{ann.date}</p>
+                      <p style={{ fontSize: '12px', fontWeight: !ann.is_read ? 700 : 500, color: !ann.is_read ? 'var(--foreground)' : 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ann.title}</p>
+                      <p style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginTop: '2px' }}>{new Date(ann.created_at || ann.date).toLocaleDateString()}</p>
                     </div>
-                    {ann.unread && <Bell size={13} color="#4F46E5" style={{ marginLeft: 'auto', flexShrink: 0, marginTop: '2px' }} />}
+                    {!ann.is_read && <Bell size={13} color="#4F46E5" style={{ marginLeft: 'auto', flexShrink: 0, marginTop: '2px' }} />}
                   </div>
                 </Link>
               ))}
@@ -115,7 +155,7 @@ export default function StudentDashboard() {
             <Link to="/events" style={{ fontSize: '12px', color: 'var(--primary)', textDecoration: 'none', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '2px' }}>Browse all <ArrowRight size={12} /></Link>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
-            {upcoming.map(event => <EventCard key={event.id} event={event} />)}
+            {upcoming.length === 0 ? <p style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>No upcoming events.</p> : upcoming.map(event => <EventCard key={event.id} event={event} />)}
           </div>
         </div>
       </div>

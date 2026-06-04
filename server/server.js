@@ -55,6 +55,18 @@ app.use((err, req, res, next) => {
 
 // Start server directly — no MongoDB connection needed
 const PORT = process.env.PORT || 5000;
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use.`);
+    console.error(`Another CampusCast server may already be running at http://localhost:${PORT}.`);
+    console.error('Stop the existing process or start this server with a different PORT.');
+    process.exit(1);
+  }
+
+  console.error(error);
+  process.exit(1);
+});
+
 server.listen(PORT, () => {
   console.log(` http://localhost:${PORT} `);
   startCronJobs();

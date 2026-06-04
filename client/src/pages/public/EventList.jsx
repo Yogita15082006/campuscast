@@ -4,7 +4,8 @@ import { Search, Filter, MapPin, Calendar, Users } from 'lucide-react';
 import StudentLayout from '../../layouts/StudentLayout';
 import EventCard from '../../components/EventCard';
 import { PageSkeleton } from '../../components/LoadingSkeleton';
-import { mockData } from '../../data/mockData';
+import api from '../../utils/api';
+import toast from 'react-hot-toast';
 
 const CATS = ['All', 'Technical', 'Cultural', 'Sports', 'Workshop'];
 
@@ -13,12 +14,28 @@ export default function EventList() {
   const [search, setSearch] = useState('');
   const [cat, setCat] = useState('All');
   const [sort, setSort] = useState('date');
-  useEffect(() => { const t = setTimeout(() => setLoading(false), 800); return () => clearTimeout(t); }, []);
+  const [events, setEvents] = useState([]);
+
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        setLoading(true);
+        const res = await api.get('/events?limit=200'); // fetch enough for client search/sort, or do server-side
+        setEvents(res.data.data.events || []);
+      } catch (error) {
+        toast.error('Failed to load events');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchEvents();
+  }, []);
+
   if (loading) return <StudentLayout><PageSkeleton /></StudentLayout>;
 
-  const filtered = mockData.events
+  const filtered = events
     .filter(e => (cat === 'All' || e.category === cat) && (e.title.toLowerCase().includes(search.toLowerCase()) || e.venue.toLowerCase().includes(search.toLowerCase())))
-    .sort((a, b) => sort === 'seats' ? b.seatsRemaining - a.seatsRemaining : sort === 'capacity' ? b.capacity - a.capacity : a.date.localeCompare(b.date));
+    .sort((a, b) => sort === 'seats' ? b.remainingSeats - a.remainingSeats : sort === 'capacity' ? b.capacity - a.capacity : String(a.date).localeCompare(String(b.date)));
 
   return (
     <StudentLayout>
@@ -61,7 +78,7 @@ export default function EventList() {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
-            {filtered.map(event => <EventCard key={event.id} event={event} />)}
+            {filtered.map(event => <EventCard key={event.id || event._id} event={event} />)}
           </div>
         )}
       </div>

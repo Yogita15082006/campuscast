@@ -2,27 +2,49 @@ import { useState, useEffect } from 'react';
 import { Send, CheckCircle, XCircle } from 'lucide-react';
 import StudentLayout from '../../layouts/StudentLayout';
 import StatusBadge from '../../components/StatusBadge';
-import { mockData } from '../../data/mockData';
+import api from '../../utils/api';
 import toast from 'react-hot-toast';
 
 export default function Attendance() {
   const [loading, setLoading] = useState(true);
   const [code, setCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  useEffect(() => { const t = setTimeout(() => setLoading(false), 800); return () => clearTimeout(t); }, []);
+  const [attendance, setAttendance] = useState([]);
 
-  const present = mockData.attendance.filter(a => a.status === 'Present').length;
-  const absent = mockData.attendance.filter(a => a.status === 'Absent').length;
-  const pct = Math.round((present / mockData.attendance.length) * 100);
+  const fetchAttendance = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/attendance/my');
+      setAttendance(res.data.data.attendance || []);
+    } catch (error) {
+      toast.error('Failed to load attendance');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchAttendance(); }, []);
+
+  // For students, absent isn't really tracked usually unless specifically logged... but if marked it will be in the DB.
+  const present = attendance.filter(a => a.status === 'present' || a.status === 'Present').length;
+  const absent = attendance.filter(a => a.status === 'absent' || a.status === 'Absent').length;
+  const total = attendance.length;
+  const pct = total > 0 ? Math.round((present / total) * 100) : 0;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!code.trim()) return toast.error('Please enter an attendance code');
-    setSubmitting(true);
-    await new Promise(r => setTimeout(r, 800));
-    if (code.toUpperCase().startsWith('EVT-')) toast.success('Attendance marked successfully!');
-    else toast.error('Invalid attendance code. Try EVT-XXXXXX format.');
-    setCode(''); setSubmitting(false);
+    try {
+      setSubmitting(true);
+      await api.post('/attendance/mark', { code });
+      toast.success('Attendance marked successfully!');
+      setCode('');
+      fetchAttendance();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Invalid or expired attendance code');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -75,20 +97,22 @@ export default function Attendance() {
               <span key={h} style={{ fontSize: '11px', fontWeight: 700, color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>{h}</span>
             ))}
           </div>
-          {loading ? <div style={{ height: '200px' }} className="skeleton" /> : mockData.attendance.map((att, i) => (
-            <div key={att.id} style={{
+          {loading ? <div style={{ height: '200px' }} className="skeleton" /> : attendance.length === 0 ? (
+            <div style={{ padding: '20px', textAlign: 'center', fontSize: '13px', color: 'var(--muted-foreground)' }}>No attendance history found.</div>
+          ) : attendance.map((att, i) => (
+            <div key={att.id || att._id} style={{
               display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', padding: '14px 20px', alignItems: 'center',
-              borderBottom: i < mockData.attendance.length - 1 ? '1px solid var(--border)' : 'none', transition: 'background 0.15s'
+              borderBottom: i < attendance.length - 1 ? '1px solid var(--border)' : 'none', transition: 'background 0.15s'
             }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--muted)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--muted)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {att.status === 'Present' ? <CheckCircle size={15} color="#10B981" /> : <XCircle size={15} color="#F43F5E" />}
-                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>{att.eventName}</span>
+                {(att.status === 'present' || att.status === 'Present') ? <CheckCircle size={15} color="#10B981" /> : <XCircle size={15} color="#F43F5E" />}
+                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>{att.event?.title}</span>
               </div>
-              <span style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>{att.date}</span>
-              <StatusBadge status={att.status} />
-              <span style={{ fontSize: '12px', color: 'var(--muted-foreground)', fontFamily: 'monospace' }}>{att.timeMarked}</span>
+              <span style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>{new Date(att.event?.date || att.markedAt).toLocaleDateString()}</span>
+              <StatusBadge status={att.status || 'present'} />
+              <span style={{ fontSize: '12px', color: 'var(--muted-foreground)', fontFamily: 'monospace' }}>{new Date(att.markedAt || att.marked_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
           ))}
         </div>

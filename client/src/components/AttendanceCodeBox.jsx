@@ -1,29 +1,73 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Copy, Check, Zap, ZapOff } from 'lucide-react';
 import CountdownTimer from './CountdownTimer';
+import api from '../utils/api';
+import toast from 'react-hot-toast';
 
-export default function AttendanceCodeBox() {
+export default function AttendanceCodeBox({ eventId }) {
   const [code, setCode] = useState(null);
   const [copied, setCopied] = useState(false);
   const [active, setActive] = useState(false);
   const [key, setKey] = useState(0);
+  const [initialSeconds, setInitialSeconds] = useState(900);
+  const [loading, setLoading] = useState(false);
 
-  const generate = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    const rand = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-    setCode(`EVT-${rand}`);
-    setActive(true);
-    setKey(k => k + 1);
+  // Check if there is an active code already
+  useEffect(() => {
+    if (!eventId) return;
+    const fetchActiveCode = async () => {
+      try {
+        const res = await api.get(`/attendance/active-code/${eventId}`);
+        const activeCode = res.data.data.code;
+        if (activeCode) {
+          const remainingSecs = Math.floor((new Date(activeCode.expires_at).getTime() - Date.now()) / 1000);
+          if (remainingSecs > 0) {
+            setCode(activeCode.code);
+            setInitialSeconds(remainingSecs);
+            setActive(true);
+            setKey(k => k + 1);
+          }
+        } else {
+          setActive(false);
+          setCode(null);
+        }
+      } catch (err) {
+        // ignore
+      }
+    };
+    fetchActiveCode();
+  }, [eventId]);
+
+  const generate = async () => {
+    if (!eventId) return toast.error('Please select an event first');
+    try {
+      setLoading(true);
+      const res = await api.post('/attendance/generate-code', { eventId, duration: 15 });
+      setCode(res.data.data.code.code);
+      setInitialSeconds(900);
+      setActive(true);
+      setKey(k => k + 1);
+      toast.success('New attendance code generated');
+    } catch (error) {
+      toast.error('Failed to generate code');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const copyCode = () => {
     if (!code) return;
-    navigator.clipboard.writeText(code).catch(() => {});
+    navigator.clipboard.writeText(code).catch(() => { });
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const deactivate = () => { setActive(false); setCode(null); };
+  const deactivate = () => {
+    // Usually there would be an endpoint to explicitly deactivate it,
+    // but the backend handles overriding active codes anyway when generating a new one
+    setActive(false);
+    setCode(null);
+  };
 
   return (
     <div style={{
@@ -48,7 +92,7 @@ export default function AttendanceCodeBox() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--muted-foreground)' }}>
             <span>Expires in:</span>
-            <CountdownTimer key={key} initialSeconds={900} onExpire={deactivate} />
+            <CountdownTimer key={key} initialSeconds={initialSeconds} onExpire={deactivate} />
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button onClick={copyCode} style={{
@@ -74,13 +118,13 @@ export default function AttendanceCodeBox() {
           <p style={{ fontSize: '13px', color: 'var(--muted-foreground)', marginBottom: '16px', lineHeight: 1.6 }}>
             Generate a unique code for students to mark attendance. Code expires in 15 minutes.
           </p>
-          <button onClick={generate} style={{
+          <button onClick={generate} disabled={loading} style={{
             padding: '10px 24px', borderRadius: '10px', border: 'none',
-            background: 'var(--primary)', color: '#fff', cursor: 'pointer',
-            fontWeight: 600, fontSize: '14px',
+            background: 'var(--primary)', color: '#fff', cursor: loading ? 'not-allowed' : 'pointer',
+            fontWeight: 600, fontSize: '14px', opacity: loading ? 0.7 : 1,
             display: 'inline-flex', alignItems: 'center', gap: '8px'
           }}>
-            <Zap size={16} /> Generate Code
+            <Zap size={16} /> {loading ? 'Generating...' : 'Generate Code'}
           </button>
         </div>
       )}

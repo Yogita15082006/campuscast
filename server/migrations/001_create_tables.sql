@@ -87,9 +87,20 @@ CREATE TABLE IF NOT EXISTS public.teams (
 );
 
 -- Add FK from registrations to teams now that teams exists
-ALTER TABLE public.registrations
-  ADD CONSTRAINT fk_registrations_team
-  FOREIGN KEY (team_id) REFERENCES public.teams(id) ON DELETE SET NULL;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'fk_registrations_team'
+      AND conrelid = 'public.registrations'::regclass
+  ) THEN
+    ALTER TABLE public.registrations
+      ADD CONSTRAINT fk_registrations_team
+      FOREIGN KEY (team_id) REFERENCES public.teams(id) ON DELETE SET NULL;
+  END IF;
+END;
+$$;
 
 -- ────────────────────────────────────────────────────────────
 -- 5. team_members
@@ -191,6 +202,7 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS events_updated_at ON public.events;
 CREATE TRIGGER events_updated_at
   BEFORE UPDATE ON public.events
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();

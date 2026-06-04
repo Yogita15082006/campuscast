@@ -4,8 +4,12 @@ const { sendRegistrationEmail } = require('../utils/email');
 // POST /api/registrations/:eventId
 exports.registerForEvent = async (req, res) => {
   try {
-    const { eventId } = req.params;
+    const eventId = req.params.eventId || req.body.eventId;
     const studentId = req.user.id;
+
+    if (!eventId) {
+      return res.status(400).json({ success: false, message: 'Event ID is required' });
+    }
 
     // Call atomic RPC — handles validation + seat decrement
     const { data: registration, error } = await supabaseAdmin.rpc('create_registration', {

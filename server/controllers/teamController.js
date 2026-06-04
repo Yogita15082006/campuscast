@@ -36,15 +36,6 @@ exports.createTeam = async (req, res) => {
     }
 
     // Check leader not already in a team for this event
-    const { data: existingMembership } = await supabaseAdmin
-      .from('team_members')
-      .select('team_id')
-      .eq('student_id', leaderId)
-      .eq('teams.event_id', eventId)
-      .limit(1)
-      .maybeSingle();
-
-    // Alternate check via join
     const { data: existingTeam } = await supabaseAdmin
       .from('teams')
       .select('id, team_members!inner(student_id)')
