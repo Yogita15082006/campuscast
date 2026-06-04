@@ -89,3 +89,7 @@ test-results/
 # Misc
 *.swp
 *.swo
+
+# Large UI Files
+Campus-Cast-UI.zip
+Campus-Cast-UI/

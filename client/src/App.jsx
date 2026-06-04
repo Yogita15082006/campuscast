@@ -1,76 +1,77 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
-import Layout from './components/Layout';
-import Home from './pages/Home';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import AdminLogin from './pages/AdminLogin';
-import StudentDashboard from './pages/StudentDashboard';
-import AdminDashboard from './pages/AdminDashboard';
-import Events from './pages/Events';
-import EventDetails from './pages/EventDetails';
-import Teams from './pages/Teams';
-import Certificates from './pages/Certificates';
+
+// Pages
+import Login from './pages/auth/Login';
+import Register from './pages/auth/Register';
+import EventList from './pages/public/EventList';
+import EventDetail from './pages/public/EventDetail';
+
+// Student
+import StudentDashboard from './pages/student/Dashboard';
+import Registrations from './pages/student/Registrations';
+import Teams from './pages/student/Teams';
+import Attendance from './pages/student/Attendance';
+import Certificates from './pages/student/Certificates';
+import Announcements from './pages/student/Announcements';
+import Feedback from './pages/student/Feedback';
+
+// Admin
+import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminEvents from './pages/admin/AdminEvents';
-import AdminTeams from './pages/admin/AdminTeams';
 import AdminAttendance from './pages/admin/AdminAttendance';
-import VerifyCertificate from './pages/VerifyCertificate';
-import Announcements from './pages/Announcements';
-import Registrations from './pages/Registrations';
-import Attendance from './pages/Attendance';
+import Analytics from './pages/admin/Analytics';
 
-const ProtectedRoute = ({ children, role }) => {
-  const { user } = useAuth();
-  if (!user) return <Navigate to="/login" />;
-  if (role && user.role !== role) {
-    return <Navigate to={user.role === 'admin' ? '/admin/dashboard' : '/student/dashboard'} />;
+function ProtectedRoute({ allowedRole }) {
+  const { currentUser } = useAuth();
+  if (!currentUser) return <Navigate to="/login" replace />;
+  if (allowedRole && currentUser.role !== allowedRole) {
+    return <Navigate to={currentUser.role === 'admin' ? '/admin/dashboard' : '/student/dashboard'} replace />;
   }
-  return children;
-};
-
-function AppRoutes() {
-  return (
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
-      <Route path="/admin/login" element={<AdminLogin />} />
-      <Route path="/verify/:certId" element={<VerifyCertificate />} />
-
-      <Route element={<Layout />}>
-        {/* Student Routes */}
-        <Route path="/student/dashboard" element={<ProtectedRoute role="student"><StudentDashboard /></ProtectedRoute>} />
-        <Route path="/events" element={<ProtectedRoute><Events /></ProtectedRoute>} />
-        <Route path="/events/:id" element={<ProtectedRoute><EventDetails /></ProtectedRoute>} />
-        <Route path="/registrations" element={<ProtectedRoute><Registrations /></ProtectedRoute>} />
-        <Route path="/attendance" element={<ProtectedRoute role="student"><Attendance /></ProtectedRoute>} />
-        <Route path="/teams" element={<ProtectedRoute role="student"><Teams /></ProtectedRoute>} />
-        <Route path="/certificates" element={<ProtectedRoute role="student"><Certificates /></ProtectedRoute>} />
-        <Route path="/announcements" element={<ProtectedRoute><Announcements /></ProtectedRoute>} />
-
-        {/* Admin Routes */}
-        <Route path="/admin/dashboard" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
-        <Route path="/admin/events" element={<ProtectedRoute role="admin"><AdminEvents /></ProtectedRoute>} />
-        <Route path="/admin/teams" element={<ProtectedRoute role="admin"><AdminTeams /></ProtectedRoute>} />
-        <Route path="/admin/attendance" element={<ProtectedRoute role="admin"><AdminAttendance /></ProtectedRoute>} />
-      </Route>
-    </Routes>
-  );
+  return <Outlet />;
 }
 
-function App() {
+export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <BrowserRouter>
-          <Toaster position="top-right" toastOptions={{ className: 'dark:bg-gray-800 dark:text-white' }} />
-          <AppRoutes />
-        </BrowserRouter>
+        <Router>
+          <Routes>
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+
+            {/* Shared Authenticated Routes */}
+            <Route element={<ProtectedRoute />}>
+              <Route path="/events" element={<EventList />} />
+              <Route path="/events/:id" element={<EventDetail />} />
+            </Route>
+
+            {/* Student Routes */}
+            <Route element={<ProtectedRoute allowedRole="student" />}>
+              <Route path="/student/dashboard" element={<StudentDashboard />} />
+              <Route path="/student/registrations" element={<Registrations />} />
+              <Route path="/student/teams" element={<Teams />} />
+              <Route path="/student/attendance" element={<Attendance />} />
+              <Route path="/student/certificates" element={<Certificates />} />
+              <Route path="/student/announcements" element={<Announcements />} />
+              <Route path="/student/feedback" element={<Feedback />} />
+            </Route>
+
+            {/* Admin Routes */}
+            <Route element={<ProtectedRoute allowedRole="admin" />}>
+              <Route path="/admin/dashboard" element={<AdminDashboard />} />
+              <Route path="/admin/events" element={<AdminEvents />} />
+              <Route path="/admin/attendance" element={<AdminAttendance />} />
+              <Route path="/admin/analytics" element={<Analytics />} />
+            </Route>
+
+            {/* Catch All */}
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </Router>
       </AuthProvider>
     </ThemeProvider>
   );
 }
-
-export default App;

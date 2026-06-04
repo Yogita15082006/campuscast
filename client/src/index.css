@@ -1,71 +1,90 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
-@theme {
-  --color-primary-50: #eef2ff;
-  --color-primary-100: #e0e7ff;
-  --color-primary-200: #c7d2fe;
-  --color-primary-300: #a5b4fc;
-  --color-primary-400: #818cf8;
-  --color-primary-500: #6366f1;
-  --color-primary-600: #4f46e5;
-  --color-primary-700: #4338ca;
-  --color-primary-800: #3730a3;
-  --color-primary-900: #312e81;
-  --color-primary-950: #1e1b4b;
-  
-  --color-dark-bg: #0b0f19;
-  --color-dark-card: #131a2a;
-  --color-dark-border: #1e293b;
+/* ── CSS Custom Properties ── */
+:root {
+  --background: #F8FAFC;
+  --foreground: #0F172A;
+  --card: #FFFFFF;
+  --card-foreground: #0F172A;
+  --border: #E2E8F0;
+  --muted: #F1F5F9;
+  --muted-foreground: #64748B;
+  --primary: #4F46E5;
+  --primary-foreground: #FFFFFF;
+  --accent: #7C3AED;
+  --accent-foreground: #FFFFFF;
+  --destructive: #F43F5E;
+  --destructive-foreground: #FFFFFF;
+  --success: #10B981;
+  --warning: #F59E0B;
+  --sidebar: #FFFFFF;
+  --sidebar-border: #E2E8F0;
+  --input: #E2E8F0;
+  --ring: #4F46E5;
+  --radius: 0.75rem;
 }
 
-@layer base {
-  body {
-    @apply bg-gray-50 text-gray-900 antialiased font-sans transition-colors duration-200;
-  }
-  
-  .dark body {
-    @apply bg-[var(--color-dark-bg)] text-gray-100;
-  }
+.dark {
+  --background: #0F172A;
+  --foreground: #F8FAFC;
+  --card: #1E293B;
+  --card-foreground: #F8FAFC;
+  --border: #334155;
+  --muted: #1E293B;
+  --muted-foreground: #94A3B8;
+  --primary: #6366F1;
+  --primary-foreground: #FFFFFF;
+  --accent: #8B5CF6;
+  --accent-foreground: #FFFFFF;
+  --destructive: #F43F5E;
+  --destructive-foreground: #FFFFFF;
+  --sidebar: #1E293B;
+  --sidebar-border: #334155;
+  --input: #334155;
 }
 
-@layer components {
-  .btn {
-    @apply inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
-  }
-  
-  .btn-primary {
-    @apply text-white bg-primary-600 hover:bg-primary-500 focus:ring-primary-500;
-  }
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
-  .btn-secondary {
-    @apply text-primary-300 bg-primary-900/40 hover:bg-primary-900/60 focus:ring-primary-500;
-  }
-  
-  .btn-danger {
-    @apply text-white bg-red-600 hover:bg-red-500 focus:ring-red-500;
-  }
-  
-  .card {
-    @apply bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden transition-all duration-200;
-  }
-  
-  .dark .card {
-    @apply bg-[var(--color-dark-card)] border-[var(--color-dark-border)];
-  }
+body {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background-color: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
 
-  .input-field {
-    @apply block w-full rounded-lg border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm px-4 py-2 border bg-white text-gray-900 transition-colors;
-  }
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+.dark ::-webkit-scrollbar-thumb { background: #475569; }
 
-  .dark .input-field {
-    @apply bg-[var(--color-dark-bg)] border-[var(--color-dark-border)] text-white placeholder-gray-500 focus:ring-primary-500 focus:border-primary-500;
-  }
-  
-  .label {
-    @apply block text-sm font-medium text-gray-700 mb-1;
-  }
-  
-  .dark .label {
-    @apply text-gray-300;
-  }
+/* Shimmer keyframes for skeletons */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--muted) 25%, var(--border) 50%, var(--muted) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 0.5rem;
+}
+
+/* Smooth page transitions */
+.page-enter {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.page-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
